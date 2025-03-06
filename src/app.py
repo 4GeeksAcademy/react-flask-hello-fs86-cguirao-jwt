@@ -10,6 +10,9 @@ from api.models import db
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
+from api.services import userService
+from flask_jwt_extended import JWTManager, create_access_token
+from flask_cors import CORS
 
 # from models import Person
 
@@ -18,6 +21,12 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../public/')
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+
+
+CORS(app)
+app.config['JWT_SECRET_KEY'] = 'your-secret-key'  
+jwt = JWTManager(app)
+
 
 # database condiguration
 db_url = os.getenv("DATABASE_URL")
@@ -64,6 +73,53 @@ def serve_any_other_file(path):
     response = send_from_directory(static_file_dir, path)
     response.cache_control.max_age = 0  # avoid cache memory
     return response
+
+@app.route('/sign_up', methods=['POST', 'GET'])
+def sign_up():
+    if request.method == 'POST':
+        data = request.get_json()
+        
+        if not data or "email" not in data or "password" not in data:
+            return jsonify({"error": "Faltan datos"}), 400
+
+        email = data["email"]
+        password = data["password"]
+
+        existing_user = userService.exist(email)
+        if existing_user:
+            return jsonify({"error": "El usuario ya está registrado"}), 409
+
+        new_user = userService.createUser(email, password)
+
+        access_token = create_access_token(identity=new_user.id)
+
+        return jsonify({"message": "Usuario registrado con éxito", "token": access_token}), 201
+
+    return jsonify({"message": "Bienvenido al endpoint de sign_up. Realice un POST para registrar un usuario."}), 200
+
+@app.route('/log_in', methods=['GET', 'POST'])
+def log_in():
+    if request.method == 'POST':
+        data = request.get_json()
+
+        if not data or "email" not in data or "password" not in data:
+            return jsonify({"error": "Faltan datos"}), 400
+
+        email = data["email"]
+        password = data["password"]
+        existing_user = userService.exist(email)
+
+        if not existing_user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+       
+
+        access_token = create_access_token(identity=existing_user.id)
+
+        return jsonify({"message": "Inicio de sesión exitoso", "token": access_token}), 200
+
+    return jsonify({"message": "Bienvenido al endpoint de log_in. Realice un POST para iniciar sesión."}), 200
+
 
 
 # this only runs if `$ python src/main.py` is executed
